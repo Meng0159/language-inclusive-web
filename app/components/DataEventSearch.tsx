@@ -25,6 +25,8 @@ export default function DataEventSearch() {
         `/api/eventBrite?lat=${selectedLocation.lat}&lng=${selectedLocation.lng}`
       );
       if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('API Error:', response.status, errorData);
         throw new Error('Failed to fetch events');
       }
       return response.json();

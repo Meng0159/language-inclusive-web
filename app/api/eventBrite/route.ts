@@ -1,7 +1,22 @@
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client-community';
 
-const prisma = new PrismaClient();
+// Create prisma client outside the handler to reuse connections
+// This is important for serverless environments like Vercel
+declare global {
+  var prisma: PrismaClient | undefined;
+}
+let prisma: PrismaClient;
+
+if (process.env.NODE_ENV === 'production') {
+  prisma = new PrismaClient();
+} else {
+  // Prevent multiple instances during development hot reloading
+  if (!global.prisma) {
+    global.prisma = new PrismaClient();
+  }
+  prisma = global.prisma;
+}
 
 interface RawEventResult {
   event_id: string;
@@ -21,25 +36,47 @@ interface RawEventResult {
   distance: number;
 }
 
-// Function to calculate distance between two coordinates using Haversine formula
-function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371; // Earth's radius in kilometers
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = 
-    Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-    Math.sin(dLon/2) * Math.sin(dLon/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return R * c;
-}
-
 export async function GET(request: Request) {
   try {
+    console.log('Fetching events...');
     const { searchParams } = new URL(request.url);
-    const lat = parseFloat(searchParams.get('lat') || '0');
-    const lng = parseFloat(searchParams.get('lng') || '0');
+    const latParam = searchParams.get('lat');
+    const lngParam = searchParams.get('lng');
+    
+    // Validate parameters
+    if (!latParam || !lngParam) {
+      return NextResponse.json(
+        { error: 'Missing required parameters: lat and lng' },
+        { status: 400 }
+      );
+    }
+    
+    const lat = parseFloat(latParam);
+    const lng = parseFloat(lngParam);
+    
+    // Validate parameter values
+    if (isNaN(lat) || isNaN(lng)) {
+      return NextResponse.json(
+        { error: 'Invalid coordinates: lat and lng must be numbers' },
+        { status: 400 }
+      );
+    }
+    
+    console.log(`Processing request for coordinates: ${lat}, ${lng}`);
     const radius = 20; // 20km radius
+
+    // Check database connection before query
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      console.log('Database connection successful');
+    } catch (dbError) {
+      console.error('Database connection failed:', dbError);
+      return NextResponse.json(
+        { error: 'Database connection failed', details: process.env.NODE_ENV === 'development' ? 
+          (dbError instanceof Error ? dbError.message : String(dbError)) : undefined },
+        { status: 503 }
+      );
+    }
 
     // Using raw SQL query with Prisma
     const events = await prisma.$queryRaw<RawEventResult[]>`
@@ -79,6 +116,8 @@ export async function GET(request: Request) {
       ORDER BY distance;
     `;
 
+    console.log(`Found ${events.length} events within ${radius}km radius`);
+
     // Transform the raw SQL results to match the Event interface
     const formattedEvents = events.map((event) => ({
       id: event.event_id,
@@ -96,18 +135,32 @@ export async function GET(request: Request) {
         address: {
           localized_address_display: `${event.venue_address}, ${event.venue_city}`,
         },
+        location: {
+          latitude: event.venue_latitude,
+          longitude: event.venue_longitude
+        }
       },
       logo: event.logo_url ? {
         url: event.logo_url,
       } : undefined,
+      distance: Math.round(event.distance * 10) / 10 // Round to 1 decimal place
     }));
-
+    
     return NextResponse.json(formattedEvents);
   } catch (error) {
     console.error('Error fetching events:', error);
+    // Include more detailed error information
     return NextResponse.json(
-      { error: 'Failed to fetch events' },
+      { 
+        error: 'Failed to fetch events',
+        message: error instanceof Error ? error.message : String(error),
+        stack: process.env.NODE_ENV === 'development' ? 
+          (error instanceof Error ? error.stack : undefined) : undefined
+      },
       { status: 500 }
     );
+  } finally {
+    // No need to disconnect in serverless environments
+    // Connections are automatically cleaned up
   }
 }
