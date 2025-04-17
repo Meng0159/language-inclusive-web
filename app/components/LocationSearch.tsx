@@ -40,7 +40,7 @@ export default function LocationSearch({
           onLocationTermChange(e.target.value);
           setShowPredictions(true);
         }}
-        placeholder="Enter a location..."
+        placeholder="Enter your location or entire postcode"
         className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
       />
 
@@ -50,7 +50,7 @@ export default function LocationSearch({
             <button
               key={prediction.place_id}
               onClick={() => handlePredictionSelect(prediction.place_id, prediction.description)}
-              className="w-full px-4 py-2 text-left hover:bg-gray-100 focus:outline-none focus:bg-gray-100"
+              className="w-full px-4 py-2 text-left hover:bg-gray-100"
             >
               {prediction.description}
             </button>

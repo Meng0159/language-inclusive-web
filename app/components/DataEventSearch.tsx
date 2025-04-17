@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { MapPin, Navigation } from 'lucide-react';
+import { MapPin, Navigation, RefreshCw } from 'lucide-react';
 import EventList from './EventList';
 import LocationSearch from './LocationSearch';
 import { useLocationSearch } from '../hooks/useLocationSearch';
@@ -15,6 +15,7 @@ export default function DataEventSearch() {
     selectedLocation,
     handlePredictionSelect,
     getCurrentLocation,
+    resetLocation,
   } = useLocationSearch();
 
   const { data: events = [], isLoading: isEventsLoading } = useQuery({
@@ -52,6 +53,13 @@ export default function DataEventSearch() {
           >
             <Navigation className="w-4 h-4" />
             Current Location
+          </button>
+          <button
+            onClick={resetLocation}
+            className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors duration-300 flex items-center gap-2"
+          >
+            <RefreshCw className="w-4 h-4" />
+            New Search
           </button>
         </div>
         {selectedLocation && (
